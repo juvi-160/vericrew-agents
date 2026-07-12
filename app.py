@@ -4,21 +4,24 @@ from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import tool
 from fpdf import FPDF
 import io
-import re
+import textwrap
 
 st.set_page_config(page_title="AI Research Crew", page_icon="🔎", layout="centered")
 
 
-def safe_wrap(text, max_word_len=50):
-    """Breaks up very long unbroken strings (like URLs) so FPDF can wrap them onto new lines."""
-    if not text:
-        return ""
-
-    def breaker(match):
-        word = match.group(0)
-        return " ".join(word[i:i + max_word_len] for i in range(0, len(word), max_word_len))
-
-    return re.sub(r"\S{%d,}" % (max_word_len + 1), breaker, text)
+def add_wrapped_text(pdf, text, width_chars=95, line_height=6):
+    """Writes text to the PDF by manually wrapping it with textwrap first,
+    avoiding FPDF's internal line-break logic which can crash on certain content."""
+    if not text or not text.strip():
+        text = "(No content returned by agent)"
+    text = text.encode("latin-1", "replace").decode("latin-1")
+    for paragraph in text.split("\n"):
+        if not paragraph.strip():
+            pdf.ln(line_height / 2)
+            continue
+        wrapped_lines = textwrap.wrap(paragraph, width=width_chars) or [""]
+        for line in wrapped_lines:
+            pdf.cell(0, line_height, line, new_x="LMARGIN", new_y="NEXT")
 
 
 # Stores the last set of search sources so the UI can show real clickable links
@@ -104,33 +107,30 @@ def generate_pdf(topic, research_text, report_text, sources=None):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
-    pdf.multi_cell(0, 10, safe_wrap(f"AI Research Crew Report: {topic}"))
+    add_wrapped_text(pdf, f"AI Research Crew Report: {topic}", width_chars=70, line_height=9)
     pdf.ln(4)
 
     pdf.set_font("Helvetica", "B", 12)
-    pdf.multi_cell(0, 8, "Research Findings (Researcher Agent)")
+    add_wrapped_text(pdf, "Research Findings (Researcher Agent)", width_chars=90, line_height=7)
     pdf.set_font("Helvetica", "", 10)
-    clean_research = safe_wrap(research_text.encode("latin-1", "replace").decode("latin-1"))
-    pdf.multi_cell(0, 6, clean_research if clean_research.strip() else "(No content returned by agent)")
+    add_wrapped_text(pdf, research_text)
     pdf.ln(4)
 
     pdf.set_font("Helvetica", "B", 12)
-    pdf.multi_cell(0, 8, "Summary Report (Writer Agent)")
+    add_wrapped_text(pdf, "Summary Report (Writer Agent)", width_chars=90, line_height=7)
     pdf.set_font("Helvetica", "", 10)
-    clean_report = safe_wrap(report_text.encode("latin-1", "replace").decode("latin-1"))
-    pdf.multi_cell(0, 6, clean_report if clean_report.strip() else "(No content returned by agent)")
+    add_wrapped_text(pdf, report_text)
 
     if sources:
         pdf.ln(4)
         pdf.set_font("Helvetica", "B", 12)
-        pdf.multi_cell(0, 8, "Sources")
+        add_wrapped_text(pdf, "Sources", width_chars=90, line_height=7)
         pdf.set_font("Helvetica", "", 10)
         seen = set()
         for src in sources:
             if src["url"] not in seen:
                 seen.add(src["url"])
-                line = safe_wrap(f"- {src['title']}: {src['url']}")
-                pdf.multi_cell(0, 6, line.encode("latin-1", "replace").decode("latin-1"))
+                add_wrapped_text(pdf, f"- {src['title']}: {src['url']}")
 
     return bytes(pdf.output())
 
