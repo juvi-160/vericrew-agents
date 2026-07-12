@@ -5,8 +5,50 @@ from crewai.tools import tool
 from fpdf import FPDF
 import io
 import textwrap
+import requests
+import re
+from collections import Counter
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="AI Research Crew", page_icon="🔎", layout="centered")
+
+STOPWORDS = set("""a an the and or but is are was were be been being to of in on for with as
+by at from this that these those it its it's their his her they he she we you i our your
+has have had not no can could will would should may might about into over under more most
+also which what when where who whom how than then so such than data ai healthcare""".split())
+
+
+def fetch_wikipedia_image(topic):
+    """Fetches a real thumbnail image for the topic from Wikipedia's free public API. Returns None if not found."""
+    try:
+        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{requests.utils.quote(topic)}"
+        resp = requests.get(url, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            thumbnail = data.get("thumbnail", {}).get("source")
+            page_url = data.get("content_urls", {}).get("desktop", {}).get("page")
+            return thumbnail, page_url
+    except Exception:
+        pass
+    return None, None
+
+
+def plot_keyword_frequency(text, top_n=10):
+    """Builds a simple bar chart of the most frequent meaningful words in the research text."""
+    words = re.findall(r"[a-zA-Z']+", text.lower())
+    words = [w for w in words if w not in STOPWORDS and len(w) > 3]
+    if not words:
+        return None
+    counts = Counter(words).most_common(top_n)
+    if not counts:
+        return None
+    labels, values = zip(*counts)
+    fig, ax = plt.subplots(figsize=(6, 3.5))
+    ax.barh(labels[::-1], values[::-1], color="#4C72B0")
+    ax.set_xlabel("Mentions")
+    ax.set_title("Most Frequent Keywords in Research Findings")
+    fig.tight_layout()
+    return fig
 
 
 def add_wrapped_text(pdf, text, width_chars=95, line_height=6):
@@ -55,8 +97,8 @@ def web_search_tool(query: str) -> str:
 
 
 @st.cache_resource
-def get_crew():
-    llm = LLM(model="ollama/llama3.2:1b", base_url="http://localhost:11434", max_tokens=400)
+def get_crew(word_count=225):
+    llm = LLM(model="ollama/llama3.2:1b", base_url="http://localhost:11434", max_tokens=max(300, int(word_count * 1.8)))
 
     researcher = Agent(
         role="Research Specialist",
@@ -87,10 +129,10 @@ def get_crew():
     )
 
     writing_task = Task(
-        description="Using the research findings, write a clear, well-organized summary report "
-                    "(200-250 words) about {topic}. Structure it with a brief intro, key points, "
-                    "and a short conclusion.",
-        expected_output="A polished, easy-to-read summary report in plain English.",
+        description=f"Using the research findings, write a clear, well-organized summary report "
+                    f"of approximately {word_count} words about {{topic}}. Structure it with a brief intro, "
+                    f"key points, and a short conclusion.",
+        expected_output=f"A polished, easy-to-read summary report of about {word_count} words in plain English.",
         agent=writer,
         context=[research_task],
     )
@@ -141,6 +183,7 @@ st.caption("Multi-agent system: a Researcher agent searches the web on any topic
            "then a Writer agent turns it into a summary report — powered by local CrewAI + Ollama.")
 
 topic = st.text_input("Enter any topic", placeholder="e.g. climate change, AI in healthcare, Mughal history").strip()
+word_count = st.slider("Target report length (words)", min_value=100, max_value=400, value=225, step=25)
 run_button = st.button("Run Agent Crew", type="primary")
 
 if run_button:
@@ -149,11 +192,16 @@ if run_button:
     else:
         last_sources.clear()
         with st.spinner(f"Agents are researching and writing about '{topic}'... this may take a minute or two on a local model."):
-            crew = get_crew()
+            crew = get_crew(word_count)
             result = crew.kickoff(inputs={"topic": topic})
         sources_found = list(last_sources)
 
         st.success("Done!")
+
+        # Wikipedia thumbnail for the topic, if one exists
+        img_url, img_page = fetch_wikipedia_image(topic)
+        if img_url:
+            st.image(img_url, caption=f"Image via Wikipedia" + (f" — {img_page}" if img_page else ""), width=300)
 
         # Pull individual task outputs so we can show each agent's contribution separately
         tasks_output = result.tasks_output
@@ -172,6 +220,10 @@ if run_button:
                 if src["url"] not in seen_urls:
                     seen_urls.add(src["url"])
                     st.markdown(f"- [{src['title']}]({src['url']})")
+
+        kw_fig = plot_keyword_frequency(research_output)
+        if kw_fig:
+            st.pyplot(kw_fig)
 
         st.markdown("### ✍️ Agent 2: Content Writer")
         st.caption("Turned the research into a polished summary")
