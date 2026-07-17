@@ -351,7 +351,7 @@ def web_search_tool(query: str) -> str:
 
 @st.cache_resource
 def get_crew(word_count=225, research_notes="", writing_notes=""):
-    llm = LLM(model="ollama/llama3.2:1b", base_url="http://localhost:11434", max_tokens=max(300, int(word_count * 1.8)))
+    llm = LLM(model="groq/llama-3.3-70b-versatile", max_tokens=max(300, int(word_count * 1.8)))
 
     researcher = Agent(
         role="Research Specialist",

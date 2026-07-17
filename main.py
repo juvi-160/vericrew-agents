@@ -1,3 +1,5 @@
+import os
+
 from ddgs import DDGS
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import tool
@@ -21,12 +23,21 @@ def web_search_tool(query: str) -> str:
     except Exception as e:
         return f"Search failed: {str(e)}"
 
+word_count = 225
 
 # ---- LLM config: local Ollama model, no API key needed ----
-llm = LLM(
-    model="groq/llama-3.3-70b-versatile",
-    max_tokens=max(300, int(word_count * 1.8))
-)
+if os.getenv("GROQ_API_KEY"):
+    llm = LLM(
+        model="groq/llama-3.3-70b-versatile",
+        api_key=os.getenv("GROQ_API_KEY"),
+        max_tokens=max(300, int(word_count * 1.8))
+    )
+else:
+    llm = LLM(
+        model="ollama/llama3.2:1b",
+        base_url="http://localhost:11434",
+        max_tokens=max(300, int(word_count * 1.8))
+    )
 
 # ---- Agents ----
 researcher = Agent(
