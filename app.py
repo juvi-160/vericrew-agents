@@ -2,6 +2,8 @@ import streamlit as st
 from ddgs import DDGS
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import tool
+import crewai.llms.cache as _crewai_cache
+_crewai_cache.mark_cache_breakpoint = lambda msg: msg
 from fpdf import FPDF
 import textwrap
 import requests
@@ -11,6 +13,11 @@ import matplotlib.pyplot as plt
 
 import os
 import streamlit as st
+
+from dotenv import load_dotenv
+load_dotenv()
+
+#os.environ["OPENAI_API_KEY"] = os.getenv("GROQ_API_KEY", "")
 
 if "GROQ_API_KEY" not in os.environ:
     try:
@@ -351,7 +358,10 @@ def web_search_tool(query: str) -> str:
 
 @st.cache_resource
 def get_crew(word_count=225, research_notes="", writing_notes=""):
-    llm = LLM(model="groq/llama-3.3-70b-versatile", max_tokens=max(300, int(word_count * 1.8)))
+    llm = LLM(
+    model="groq/llama-3.3-70b-versatile",
+    max_tokens=max(300, int(word_count * 1.8))
+    )
 
     researcher = Agent(
         role="Research Specialist",

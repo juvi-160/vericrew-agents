@@ -1,11 +1,12 @@
-import os
 
+from dotenv import load_dotenv
+import os
 from ddgs import DDGS
 from crewai import Agent, Task, Crew, Process, LLM
 from crewai.tools import tool
-from dotenv import load_dotenv
-load_dotenv()  # Load environment variables from .env file
 
+load_dotenv()  # Load environment variables from .env file
+# os.environ["OPENAI_API_KEY"] = os.getenv("GROQ_API_KEY", "")
 
 # ---- Custom tool: free web search using DuckDuckGo, works for ANY topic ----
 @tool("Web Search Tool")
@@ -26,19 +27,12 @@ def web_search_tool(query: str) -> str:
 word_count = 225
 
 # ---- LLM config: local Ollama model, no API key needed ----
-if os.getenv("GROQ_API_KEY"):
-    llm = LLM(
-        model="groq/llama-3.3-70b-versatile",
-        api_key=os.getenv("GROQ_API_KEY"),
-        max_tokens=max(300, int(word_count * 1.8))
-    )
-else:
-    llm = LLM(
-        model="ollama/llama3.2:1b",
-        base_url="http://localhost:11434",
-        max_tokens=max(300, int(word_count * 1.8))
-    )
-
+llm = LLM(
+    model="openai/llama-3.3-70b-versatile",
+    base_url="https://api.groq.com/openai/v1",
+    api_key=os.getenv("GROQ_API_KEY"),
+    max_tokens=max(300, int(word_count * 1.8))
+)
 # ---- Agents ----
 researcher = Agent(
     role="Research Specialist",
